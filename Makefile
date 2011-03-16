@@ -22,6 +22,8 @@ main.hex: out/main.elf
 flash: main.hex
 	$(AVRDUDE) -U flash:w:main.hex:i
 
+program: flash
+
 size:
 	avr-size out/main.elf
 
