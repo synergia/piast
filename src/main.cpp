@@ -2,6 +2,10 @@
 #include "usart.h"
 #include "lcd.h"
 #include <avr/eeprom.h> 
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+#define abs(x) ((x) < 0 ? -(x) : (x))
 
 // data structures
 
@@ -23,6 +27,7 @@ void menu_brightness();
 
 LCD lcd;
 Joystick joy;
+USART0(robot);
 
 int contrast = config_read(CONTRAST);
 int brightness = config_read(BRIGHTNESS);
@@ -125,8 +130,8 @@ void home_char_set() {
 }
 
 void home_gui() {
-    lcd.gotoxy(2, 1);
-    lcd << "X    Y    Z";
+    lcd.gotoxy(0, 1);
+    lcd << "X    Y";
 }
 
 unsigned int menu_pos = 0;
@@ -136,6 +141,8 @@ MenuItem menu[] = {
 };
 
 volatile int axis = 0;
+volatile int e0,e1;
+volatile int e0prev, e1prev;
 
 void show_menu_pos() {
     lcd.gotoxy(0, 1);
@@ -196,6 +203,13 @@ void KEYSinit() {
     DDRC = _BV(PC0) | _BV(PC1);
 }
 
+void send_power(char device, char motor, char power){
+	robot.sendByte(device);
+	robot.sendByte(4);
+	robot.sendByte(motor);
+	robot.sendByte(power);
+}
+
 void home() {
     lcd.gotoxy(0, 0);
     if (joy.x <= -100) {
@@ -240,27 +254,67 @@ void home() {
         lcd << "[ " << char(3) << char(5) << "]";
     }
 
-    lcd.gotoxy(10, 0);
-    if (joy.z <= -100) {
-        lcd << "[" << char(5) << char(1) << " ]";
-    } else if (joy.z < -80) {
-        lcd << "[" << char(3) << char(1) << " ]";
-    } else if (joy.z < -60) {
-        lcd << "[" << char(2) << char(1) << " ]";
-    } else if (joy.z < -40) {
-        lcd << "[ " << char(1) << " ]";
-    } else if (joy.z <= 20) {
-        lcd << "[ " << char(0) << " ]";
-    }  else if (joy.z <= 40) {
-        lcd << "[ " << char(3) << " ]";
-    } else if (joy.z <= 60) {
-        lcd << "[ " << char(3) << char(4) << "]";
-    } else if (joy.z <= 80) {
-        lcd << "[ " << char(3) << char(1) << "]";
-    } else if (joy.z <= 100) {
-        lcd << "[ " << char(3) << char(5) << "]";
-    }
+    // lcd.gotoxy(10, 0);
+    //     if (joy.z <= -100) {
+    //         lcd << "[" << char(5) << char(1) << " ]";
+    //     } else if (joy.z < -80) {
+    //         lcd << "[" << char(3) << char(1) << " ]";
+    //     } else if (joy.z < -60) {
+    //         lcd << "[" << char(2) << char(1) << " ]";
+    //     } else if (joy.z < -40) {
+    //         lcd << "[ " << char(1) << " ]";
+    //     } else if (joy.z <= 20) {
+    //         lcd << "[ " << char(0) << " ]";
+    //     }  else if (joy.z <= 40) {
+    //         lcd << "[ " << char(3) << " ]";
+    //     } else if (joy.z <= 60) {
+    //         lcd << "[ " << char(3) << char(4) << "]";
+    //     } else if (joy.z <= 80) {
+    //         lcd << "[ " << char(3) << char(1) << "]";
+    //     } else if (joy.z <= 100) {
+    //         lcd << "[ " << char(3) << char(5) << "]";
+    //     }
+		
+	e0prev = e0;
+	e1prev = e1;
+	
 
+
+	if(joy.y >= 0){
+		if(joy.x >= 0){
+			e0 = joy.y;
+			e1 = joy.y - joy.x;
+		} else {
+			e0 = joy.y + joy.x;
+			e1 = joy.y;
+		}
+	} else {
+		if(joy.x >= 0){
+			e0 = joy.y;
+			e1 = joy.y + joy.x;
+		} else {
+			e0 = joy.y - joy.x;
+			e1 = joy.y;
+		}
+	}
+	
+	if ((e0 > -10) && (e0 < 10)) e0 = 0;
+	if ((e1 > -10) && (e1 < 10))  e1 = 0;
+	
+	 // robot.sendByte(-50);
+	
+	if ((abs(e0prev-e0) > 2) || (abs(e1prev-e1) > 2)){
+	
+		send_power(1, 0, e0);
+		send_power(1, 1, e1);
+		send_power(2, 0, e0);
+		send_power(2, 1, e1);
+
+		lcd.gotoxy(11,0);
+		lcd << e0 << "   ";
+		lcd.gotoxy(11,1);
+		lcd << e1 << "   ";
+	}	
 }
 
 int main() {
@@ -285,6 +339,7 @@ int main() {
     // welcome message
     lcd.gotoxy(0, 0);
     lcd << "     WITAM!    ";
+	//robot <<"WITAM!\n\r\n\r";
     _delay_ms(1000);
     lcd.clear();
 
